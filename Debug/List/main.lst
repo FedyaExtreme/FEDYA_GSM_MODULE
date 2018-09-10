@@ -1,0 +1,279 @@
+###############################################################################
+#
+# IAR C/C++ Compiler V7.10.1.1197 for Atmel AVR           30/Aug/2018  12:57:59
+# Copyright 1996-2017 IAR Systems AB.
+# Standalone license - IAR Embedded Workbench 4K Kickstart edition for Atmel AVR 7.10
+#
+#    Source file  =  D:\Федор_2018\GSM_модуль\федя\main.c
+#    Command line =  
+#        -f C:\Users\User\AppData\Local\Temp\EW1883.tmp
+#        (D:\Федор_2018\GSM_модуль\федя\main.c --cpu=m8 -ms -o
+#        D:\Федор_2018\GSM_модуль\федя\Debug\Obj -lCN
+#        D:\Федор_2018\GSM_модуль\федя\Debug\List --initializers_in_flash
+#        --no_cse --no_inline --no_code_motion --no_cross_call --no_clustering
+#        --no_tbaa --debug -DENABLE_BIT_DEFINITIONS -e --eeprom_size 512 --dlib
+#        --dlib_config "C:\Program Files\IAR Systems\Embedded Workbench
+#        8.0\avr\LIB\DLIB\dlAVR-1s-ec_mul-n.h" -Ol)
+#    Locale       =  Russian_RUS.1251
+#    List file    =  D:\Федор_2018\GSM_модуль\федя\Debug\List\main.lst
+#    Object file  =  D:\Федор_2018\GSM_модуль\федя\Debug\Obj\main.r90
+#
+###############################################################################
+
+D:\Федор_2018\GSM_модуль\федя\main.c
+      1              //ATmega8
+      2          #define F_CPU 8000000
+      3          
+      4          #include <iom8.h>
+      5                // #include <SoftwareSerial.h>
+      6              //#include <util/delay.h>
+      7              //#include <avr/interrupt.h>
+      8          #include <ina90.h>
+      9          #include <sfr_defs.h>
+     10          
+     11          
+     12          
+     13          
+     14          #define BUTTON_PIN 					PINB
+     15          #define KN0_BIT 					PB0
+     16          #define KN1_BIT 					PB1
+     17          #define KN2_BIT 					PB2
+     18          #define KN4_BIT 					PB4
+     19          #define KN5_BIT					        PB5
+     20          #define KN6_BIT                                         PB6
+     21          
+     22          #define KEY_KN0					0b00000001
+     23          #define KEY_KN1					0b00000010
+     24          #define KEY_KN2				        0b00000100
+     25          #define KEY_KN4					0b00010000
+     26          #define KEY_KN5					0b00100000
+     27          #define KEY_KN6                                 0b01000000
+     28          
+     29          #define DEBOUNCE_TIME 					20
+     30          
+     31          volatile int _pressed = 0;
+     32          
+     33          
+     34          unsigned char status=0; // переменная статуса
+     35          char value=0;//переменная данных
+     36          
+     37          
+     38          void init_timer0()
+     39          {
+     40            TIMSK = (1<<TOIE0);// разрешить прерывание по переполнению таймера 0
+     41            TCCR0 |= (1<<CS01)|(1<<CS00); //clk/64
+     42          }
+     43          
+     44            
+     45          void init_io()
+     46          {
+     47            
+     48            DDRD = 0x02; // Ustanovka porta D na RX i TX
+     49            PORTD = 0x00; // nuli
+     50            DDRB = 0x88; // Ustanovka porta B na vhod
+     51            PORTB = 0x77; // resustoru podtiagivayushie
+     52            
+     53            
+     54            
+     55            
+     56          }
+     57          
+     58          void init_UART()
+     59          {
+     60          	//	
+     61          	UBRRH=0x00;	//	UBRR=f/(16*band)-1 f=8000000?? band=9600, 
+     62          	UBRRL=0x33;	//	
+     63          	
+     64          //			RXC			-	
+     65          //			|TXC		-	
+     66          //			||UDRE 		-	
+     67          //			|||FE		-	
+     68          //			||||DOR		-	
+     69          //			|||||PE		-	
+     70          //			||||||U2X	-	
+     71          //			|||||||MPCM	-	
+     72          //			76543210
+     73          	UCSRA=0x00;
+     74          
+     75          //			RXCIE		-	
+     76          //			|TXCIE		-	
+     77          //			||UDRIE		-	
+     78          //			|||RXEN		-	
+     79          //			||||TXEN	-	
+     80          //			|||||UCSZ2	-	
+     81          //			||||||RXB8	-	
+     82          //			|||||||TXB8	-	
+     83          //			76543210
+     84          	UCSRB=0x18;	//	разрешен прием и передача по UART
+     85          
+     86          //			URSEL		-	
+     87          //			|UMSEL		-	
+     88          //			||UPM1		-	
+     89          //			|||UPM0		-	
+     90          //			||||USBS	-	?
+     91          //			|||||UCSZ1	-	
+     92          //		        ||||||UCSZ0	-	
+     93          //			|||||||UCPOL-	
+     94          	//	76543210
+     95          	UCSRC=0x86;	//	8-битовая посылка
+     96          }
+     97          
+     98          void send_UART (char value)
+     99          {
+    100            while(!( UCSRA & (1 << UDRE)));  //Ожидаем когда очистится буфер передачи
+    101            UDR = value; // помещаем данные в буфер, начинаем передачу
+    102          }
+    103          
+    104          
+    105          
+    106          
+    107          //void Button_selection(char value)
+    108          //{
+    109            //if (status==1)        // если кнопка нажата
+    110           // {  value = 'AT'; 
+    111           // }         // записываем данные в value
+    112           // else value = 0;
+    113           // }          
+    114          
+    115          
+    116          #pragma vector = TIMER0_OVF_vect
+    117          __interrupt void TIMER0_INT
+    118          {
+    119            if ((PINB&0x77)==0x00)
+    120            {
+    121              // если низкий уровень на PB0-2,PB4-6
+    122           pause(1000);//пауза 0.01с
+    123           if ((PINB&0b01110111)==0x00) // если кнопка нажата
+    124           {
+    125             while ((PINB&0b01110111)==0x00); // ждем отжатия кнопки
+    126             if (status==0)  
+    127               status=1; // Меняем статус в 1
+    128             else status=0;
+    129           }
+    130            }
+    131            TCNT0=0x00; //обнуляем счетчик таймера 0
+    132            TIFR=0x00;  // обнуляем регистр флага переполнения
+    133            return;
+    134          }
+    135          
+    136          
+    137          
+    138          
+    139          
+    140          void process_KN0()
+    141          {
+    142          	send_UART('AT+GMM');
+    143                    _delay_ms(500);
+    144          }
+    145          
+    146          void process_KN1()
+    147          {
+    148          	send_UART('AT+GMM');
+    149                    _delay_ms(500);
+    150          }
+    151          
+    152          void process_KN2()
+    153          {
+    154          	send_UART('AT+GMM');
+    155                    _delay_ms(500);
+    156          }
+    157          
+    158          void process_KN4()
+    159          {
+    160          	send_UART('AT+GMM');
+    161                    _delay_ms(500);
+    162          }
+    163          
+    164          void process_KN5()
+    165          {
+    166          	send_UART('AT+GMM');
+    167                    _delay_ms(500);
+    168          }
+    169          
+    170          void process_KN6()
+    171          {
+    172          	send_UART('AT+GMM');
+    173                    _delay_ms(500);
+    174          }
+    175          
+    176          
+    177          
+    178          
+    179          
+    180          void handle_button(int key)
+    181          {
+    182          	int bit;
+    183          	switch (key)
+    184          	{
+    185          		case KEY_KN0	: 	bit = KN0_BIT; break;
+    186          		case KEY_KN1	: 	bit = KN1_BIT; break;
+    187          		case KEY_KN2	: 	bit = KN2_BIT; break;
+    188          		case KEY_KN4	: 	bit = KN4_BIT; break;
+    189          		case KEY_KN5	: 	bit = KN5_BIT; break;
+    190          		case KEY_KN6	: 	bit = KN6_BIT; break;
+    191          		
+    192                  default: return;
+    193          	}
+    194          
+    195          	if (bit_is_clear(BUTTON_PIN, bit))
+    196          	{
+    197          		if (_pressed == 0)
+    198          		{
+    199          			_delay_ms(DEBOUNCE_TIME);
+    200          			if (bit_is_clear(BUTTON_PIN, bit))
+    201          			{
+    202          				_pressed |= key;
+    203          
+    204          				// key action
+    205          				switch (key)
+    206          				{
+    207          					case KEY_KN0: 	process_KN0(); break;
+    208          					case KEY_KN1: 	process_KN1(); break;
+    209          					case KEY_KN2: 	process_KN2(); break;
+    210          					case KEY_KN4: 	process_KN4(); break;
+    211          					case KEY_KN5: 	process_KN5(); break;
+    212                                                  case KEY_KN6: 	process_KN6(); break;
+    213          				}
+    214          
+    215          				//sound_on(15);
+    216          			}
+    217          		}
+    218          	}
+    219          	else
+    220          	{
+    221          		_pressed &= ~key;
+    222          	}
+    223          }
+    224          
+    225          void handle_buttons()
+    226          {
+    227          	handle_button(KEY_KN0);
+    228          	handle_button(KEY_KN1);
+    229          	handle_button(KEY_KN2);
+    230          	handle_button(KEY_KN4);
+    231          	handle_button(KEY_KN5);
+    232                  handle_button(KEY_KN6);
+    233          }
+    234          
+    235          
+    236          
+    237          int main( void )
+    238          {
+    239            init_io();
+    240           
+    241            init_UART();
+    242            init_timer();
+    243            
+    244            sei();
+    245              while(1)
+    246              {
+    247                cli();      //Запрет на прерывания пока нажата кнопка и отправляются данные
+    248                handle_buttons();
+    249               
+    250              }
+    251              
+    252            return 0;
+    253          }
+
+Errors: 10
+Warnings: 3
